@@ -7,17 +7,13 @@ package com.mattermost.mattermost;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.AsyncTask;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.webkit.CookieManager;
-import android.webkit.ValueCallback;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceError;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.view.KeyEvent;
@@ -29,9 +25,6 @@ import com.mattermost.service.MattermostService;
 import com.mattermost.service.Promise;
 
 
-import java.net.HttpCookie;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.io.InputStreamReader;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -65,7 +58,12 @@ public class MainActivity extends WebViewActivity {
         String url = service.getBaseUrl();
         if (!url.endsWith("/"))
             url += "/";
-        url += "channels/town-square";
+
+        if (MattermostService.service.GetLastPath().length() > 0) {
+            Log.i("loadRootView", "loading " + MattermostService.service.GetLastPath());
+            url = MattermostService.service.GetLastPath();
+        }
+
         webView.loadUrl(url);
 
         dialog = new ProgressDialog(this);
@@ -80,6 +78,12 @@ public class MainActivity extends WebViewActivity {
         webView.onPause();
         webView.pauseTimers();
         timeAway = System.currentTimeMillis();
+
+        // We only set the last path if it was a channel view
+        if (webView.getUrl().contains("/channels/")) {
+            MattermostService.service.SetLastPath(webView.getUrl());
+        }
+
         super.onPause();
     }
 
@@ -99,9 +103,33 @@ public class MainActivity extends WebViewActivity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
-            moveTaskToBack(true);
-            return true;
+            Log.i("Back", webView.getUrl());
+            if (webView.getUrl().equals(MattermostService.service.getBaseUrl())) {
+                MattermostService.service.logout();
+
+                Intent intent = new Intent(this, SelectServerActivity.class);
+                startActivityForResult(intent, SelectServerActivity.START_CODE);
+                finish();
+                return true;
+            } else if (webView.getUrl().endsWith("/login")) {
+                MattermostService.service.logout();
+
+                Intent intent = new Intent(this, SelectServerActivity.class);
+                startActivityForResult(intent, SelectServerActivity.START_CODE);
+                finish();
+                return true;
+            } else if (webView.getUrl().endsWith("/select_team")) {
+                onLogout();
+                return true;
+            } else if (webView.canGoBack()) {
+                webView.goBack();
+                return true;
+            } else {
+                finish();
+                return true;
+            }
         }
+
         return super.onKeyDown(keyCode, event);
     }
 
@@ -132,33 +160,7 @@ public class MainActivity extends WebViewActivity {
 
                     alert.show();
                 }
-
-                // Check to see if we need to attach the device Id
-                if (url.toLowerCase().endsWith("/channels/town-square")) {
-                    if (isLoggedIn() && !MattermostService.service.isAttached()) {
-                        Log.i("MainActivity", "Attempting to attach device id");
-                        MattermostService.service.init(MattermostService.service.getBaseUrl());
-                        MattermostService.service.attachDevice()
-                                .then(new IResultListener<User>() {
-                                    @Override
-                                    public void onResult(Promise<User> promise) {
-                                        if (promise.getError() != null) {
-                                            Log.e("AttachDeviceId", promise.getError());
-                                        } else {
-                                            Log.i("AttachDeviceId", "Attached device_id to session");
-                                            MattermostService.service.SetAttached();
-                                        }
-                                    }
-                                });
-                    }
-                }
             }
-
-//            @Override
-//            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-//                Log.e("onReceivedError", "onReceivedError while loading");
-//                Log.e("onReceivedError", error.getDescription().toString() + " " + error.getErrorCode());
-//            }
 
             @Override
             public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
@@ -193,7 +195,23 @@ public class MainActivity extends WebViewActivity {
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 Uri uri = Uri.parse(url);
 
-                if (!isLoggedIn()) {
+                // Do not open in other browser if gitlab
+                if (uri.getPath().contains("/oauth/authorize")) {
+                    return false;
+                }
+
+                // Do not open in other browser if gitlab
+                if (uri.getPath().contains("/oauth/token")) {
+                    return false;
+                }
+
+                // Do not open in other browser if gitlab
+                if (uri.getPath().contains("/api/v3/user")) {
+                    return false;
+                }
+
+                // Do not open in other browser if gitlab
+                if (uri.getPath().contains("/users/sign_in")) {
                     return false;
                 }
 
@@ -207,7 +225,7 @@ public class MainActivity extends WebViewActivity {
                     return true;
                 }
 
-                if (uri.getPath().startsWith("/api/v1/files/get/")) {
+                if (uri.getPath().contains("/files/get/")) {
                     openUrl(uri);
                     return true;
                 }
@@ -217,25 +235,31 @@ public class MainActivity extends WebViewActivity {
 
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
+
+                // Check to see if we need to attach the device Id
+                if (url.toLowerCase().contains("/channels/")) {
+                    if (!MattermostService.service.isAttached()) {
+                        Log.i("MainActivity", "Attempting to attach device id");
+                        MattermostService.service.init(MattermostService.service.getBaseUrl());
+                        Promise<User> p = MattermostService.service.attachDevice();
+                        if (p != null) {
+                            p.then(new IResultListener<User>() {
+                                @Override
+                                public void onResult(Promise<User> promise) {
+                                    if (promise.getError() != null) {
+                                        Log.e("AttachDeviceId", promise.getError());
+                                    } else {
+                                        Log.i("AttachDeviceId", "Attached device_id to session");
+                                        MattermostService.service.SetAttached();
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+
                 // Check to see if the user was trying to logout
                 if (url.toLowerCase().endsWith("/logout")) {
-                    MattermostApplication.handler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            onLogout();
-                        }
-                    });
-                }
-
-                String baseUrl = "";
-                int i = service.getBaseUrl().lastIndexOf("/");
-                if (i != -1) {
-                    baseUrl = service.getBaseUrl().substring(0, i);
-
-                }
-
-                // If you're at the root then logout and so the select team view
-                if (url.toLowerCase().endsWith(baseUrl + "/") || url.toLowerCase().endsWith(baseUrl)) {
                     MattermostApplication.handler.post(new Runnable() {
                         @Override
                         public void run() {
@@ -254,22 +278,6 @@ public class MainActivity extends WebViewActivity {
         startActivity(intent);
     }
 
-    private boolean isLoggedIn() {
-        String baseUrl = service.getBaseUrl();
-        if (baseUrl == null) {
-            return false;
-        }
-
-        String cookies = CookieManager.getInstance().getCookie(baseUrl);
-        if (cookies == null)
-            return false;
-        if (cookies.trim().isEmpty())
-            return false;
-        if (!cookies.contains("MMTOKEN"))
-            return false;
-        return true;
-    }
-
     @Override
     protected void onLogout() {
         Log.i("MainActivity", "onLogout called");
@@ -277,8 +285,10 @@ public class MainActivity extends WebViewActivity {
 
         MattermostService.service.logout();
 
-        Intent intent = new Intent(this, SelectTeamActivity.class);
-        startActivityForResult(intent, SelectTeamActivity.START_CODE);
+        Intent intent = new Intent(this, SelectServerActivity.class);
+        startActivityForResult(intent, SelectServerActivity.START_CODE);
         finish();
     }
+
+
 }

@@ -1,8 +1,10 @@
 # Mattermost Android Application (Beta)
 
-Mattermost Android Application for use with Mattermost server 2.1 and higher (http://www.mattermost.org/download/).
+Note: The Android app is being upgraded to work with the Mattermost 3.0 server. If you want the latest version compatible with the 2.x server, please compile from the Android 1.14 release branch or use the app hosted on Google Play. 
 
-> Note: The Mattermost Android App requires APIs being introduced in Mattermsot 2.1, which releases on March 16, 2016. You can test Android app functionality by joining the nightly builds server at https://pre-release.mattermost.com/core or by compiling [Mattermost platform](https://github.com/mattermost/platform) from the latest source code. 
+Mattermost Android Application for use with Mattermost server 2.1 and 2.2 (http://www.mattermost.org/download/).
+
+> Note: The Mattermost Android App requires APIs being introduced in Mattermost 2.1, which releases on March 16, 2016. You can test Android app functionality by joining the nightly builds server at https://pre-release.mattermost.com/core or by compiling [Mattermost platform](https://github.com/mattermost/platform) from the latest source code. 
 
 #### Beta Testing
 
@@ -11,7 +13,7 @@ Mattermost Android Application for use with Mattermost server 2.1 and higher (ht
 #### Supported Platforms 
 
 - See [listing of verified Android devices](DEVICES.md) on which this application has been manually tested.
-- Minimum required Android operating system is 4.4.2+. 
+- Minimum required Android operating system is 4.4.2+ with Google Play Services enabled.
 
 #### Requirements for Deployment 
 
@@ -30,3 +32,7 @@ Mattermost Android Application for use with Mattermost server 2.1 and higher (ht
 #### Bugs, Feature Ideas and Troubleshooting 
 
 - Please see [documentation on filing Bugs, adding Feature Ideas and getting help Troubleshooting](http://docs.mattermost.com/process/community-systems.html).
+
+#### Known Issues
+
+- Back button does not work on Channel Navigation or User Settings views
